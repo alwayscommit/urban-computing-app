@@ -1,11 +1,14 @@
 package com.example.urbancomputingapp;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
+import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -13,9 +16,16 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.Task;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -25,11 +35,6 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
-    private TextView temperatureText;
-    private TextView pressureText;
-    private TextView brightnessText;
-    private SensorManager sensorManager;
-    private List<Sensor> mySensors;
     //temperature - 33172002, 33172003,
     //brightness - 65541
     //ambient light - 5
@@ -37,9 +42,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final List<Float> temperatureList = new ArrayList<Float>();
     private final List<Float> brightnessList = new ArrayList<Float>();
     private final List<Float> pressureList = new ArrayList<Float>();
+    private TextView temperatureText;
+    private TextView pressureText;
+    private TextView brightnessText;
+    private SensorManager sensorManager;
+    private List<Sensor> mySensors;
     private Button saveTemperature;
     private Button savePressure;
     private Button saveBrightness;
+    private Button locationButton;
+    private TextView locationText;
+    private FusedLocationProviderClient fusedLocationProviderClient;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
@@ -50,13 +63,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         pressureText = findViewById(R.id.pressureText);
         brightnessText = findViewById(R.id.brightnessText);
         saveTemperature = findViewById(R.id.saveTemperature);
-        saveTemperature.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                writeTemperatureToCSV();
-            }
-        });
-
+        saveTemperature.setOnClickListener(v -> writeTemperatureToCSV());
+        locationButton = findViewById(R.id.locationButton);
+        locationText = findViewById(R.id.locationText);
         saveBrightness = findViewById(R.id.saveBrightness);
         saveBrightness.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -72,26 +81,43 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 writePressureToCSV();
             }
         });
-        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        mySensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
 
+        sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+//        mySensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
+
+        fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
+        locationButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+//                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                    ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 44);
+                } else {
+                    fusedLocationProviderClient.getLastLocation().addOnCompleteListener(task -> {
+                        Location location = task.getResult();
+                        if (location != null) {
+                            locationText.setText("Latitude: " + location.getLatitude() + "Longitude: " + location.getLongitude());
+                        }
+                    });
+                }
+            }
+        });
     }
+
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-
         Sensor sensor = event.sensor;
         if (sensor.getType() == 33172003) {
             temperatureText.setText(String.valueOf(event.values[0]));
             temperatureList.add(event.values[0]);
-        } else if (sensor.getType() == 6) {
+        } else if (sensor.getType() == Sensor.TYPE_RELATIVE_HUMIDITY) {
             pressureText.setText(String.valueOf(event.values[0]));
             pressureList.add(event.values[0]);
         } else if (sensor.getType() == 5) {
             brightnessText.setText(String.valueOf(event.values[0]));
             brightnessList.add(event.values[0]);
         }
-
     }
 
     @Override
