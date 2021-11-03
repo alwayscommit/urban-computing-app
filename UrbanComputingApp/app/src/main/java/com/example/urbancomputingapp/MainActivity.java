@@ -16,21 +16,29 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.Response;
+import com.android.volley.VolleyError;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
+import com.example.urbancomputingapp.dao.FirebaseDAO;
+import com.example.urbancomputingapp.model.LocationData;
+import com.example.urbancomputingapp.model.SensorData;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.tasks.OnCompleteListener;
-import com.google.android.gms.tasks.Task;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
@@ -53,10 +61,20 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private Button locationButton;
     private TextView locationText;
     private FusedLocationProviderClient fusedLocationProviderClient;
+    private Calendar c1 = null;
+    private Calendar c2 = null;
+    private int startTime = 0;
+    private int endTime = 0;
+    private FirebaseDAO firebaseDAO = new FirebaseDAO();
+    private static final String CONSUMER_KEY = BuildConfig.CONSUMER_KEY;
+    private static final Integer INTERVAL = BuildConfig.INTERVAL;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        c1 = Calendar.getInstance();
+        startTime = c1.get(Calendar);
+        System.out.println("Start Time 1 :: " + startTime);
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         temperatureText = findViewById(R.id.temperatureText);
@@ -67,26 +85,17 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         locationButton = findViewById(R.id.locationButton);
         locationText = findViewById(R.id.locationText);
         saveBrightness = findViewById(R.id.saveBrightness);
-        saveBrightness.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                writeBrightnessToCSV();
-            }
-        });
+        saveBrightness.setOnClickListener(v -> writeBrightnessToCSV());
 
         savePressure = findViewById(R.id.savePressure);
-        savePressure.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                writePressureToCSV();
-            }
-        });
+        savePressure.setOnClickListener(v -> writePressureToCSV());
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
 //        mySensors = sensorManager.getSensorList(Sensor.TYPE_ALL);
 
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
         locationButton.setOnClickListener(new View.OnClickListener() {
+            @RequiresApi(api = Build.VERSION_CODES.O)
             @Override
             public void onClick(View v) {
 //                if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
@@ -96,7 +105,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     fusedLocationProviderClient.getLastLocation().addOnCompleteListener(task -> {
                         Location location = task.getResult();
                         if (location != null) {
-                            locationText.setText("Latitude: " + location.getLatitude() + "Longitude: " + location.getLongitude());
+                            getLocationData(location.getLatitude(), location.getLongitude());
+//                          locationText.setText("Latitude: " + location.getLatitude() + "Longitude: " + location.getLongitude());
                         }
                     });
                 }
@@ -104,19 +114,66 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
     }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void getLocationData(Double latitude, Double longitude) {
+        RequestQueue queue = Volley.newRequestQueue(this);
+        String url ="https://api.openweathermap.org/data/2.5/weather?units=metric&lat="+latitude+"&lon="+longitude+"&appid="+CONSUMER_KEY;
+        StringRequest stringRequest = new StringRequest(Request.Method.GET, url,
+                response -> {
+                    LocationData locationData = new LocationData();
+                    locationData.setDateTime(LocalDateTime.now().toString());
+                    locationData.setLocationData(response);
+                    firebaseDAO.recordLocationData(locationData);
+                    locationText.setText("Response is: "+ response.toString());
+                }, error -> locationText.setText("That didn't work!"));
+        queue.add(stringRequest);
+    }
 
+    @RequiresApi(api = Build.VERSION_CODES.O)
     @Override
     public void onSensorChanged(SensorEvent event) {
         Sensor sensor = event.sensor;
+        //phone temp
         if (sensor.getType() == 33172003) {
             temperatureText.setText(String.valueOf(event.values[0]));
             temperatureList.add(event.values[0]);
-        } else if (sensor.getType() == Sensor.TYPE_RELATIVE_HUMIDITY) {
-            pressureText.setText(String.valueOf(event.values[0]));
-            pressureList.add(event.values[0]);
-        } else if (sensor.getType() == 5) {
+            if (createEntry()) {
+                recordSensorData();
+            }
+            //ambient light
+        } else if (sensor.getType() == INTERVAL) {
             brightnessText.setText(String.valueOf(event.values[0]));
             brightnessList.add(event.values[0]);
+            if (createEntry()) {
+                recordSensorData();
+            }
+        }
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void recordSensorData() {
+        SensorData sensorData = new SensorData();
+        sensorData.setDateTime(LocalDateTime.now().toString());
+        sensorData.setTemperature(temperatureText.getText().toString());
+        sensorData.setAmbientLight(brightnessText.getText().toString());
+        firebaseDAO.recordSensorData(sensorData);
+    }
+
+    private Boolean createEntry() {
+        c2 = Calendar.getInstance();
+        endTime = c2.get(Calendar.SECOND);
+        System.out.println("Start time: " + startTime);
+        System.out.println("End time: " + endTime);
+        int secondsElapsed = endTime - startTime;
+        System.out.println(secondsElapsed);
+        if (secondsElapsed == 5) {
+            c1 = Calendar.getInstance();
+            startTime = c1.get(Calendar.SECOND);
+            System.out.println("New start time::" + startTime);
+            endTime = 0;
+            return true;
+        } else {
+            return false;
         }
     }
 
@@ -128,9 +185,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @Override
     protected void onResume() {
         super.onResume();
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(33172003), SensorManager.SENSOR_DELAY_FASTEST);
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(6), SensorManager.SENSOR_DELAY_FASTEST);
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(5), SensorManager.SENSOR_DELAY_FASTEST);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(33172003), 30000000);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(6), 30000000);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(5), 30000000);
     }
 
     @Override
@@ -227,18 +284,4 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }
     }
 
-    /*private void printSpecificSensor(int typeAmbientTemperature) {
-        if (sensorManager.getDefaultSensor(Sensor.TYPE_AMBIENT_TEMPERATURE) != null) {
-            textView.setText("This device has a temperature sensor");
-        } else {
-            textView.setText(sensorManager.getDefaultSensor(33172002).toString());
-        }
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.N)
-    private void printSensorData() {
-        for (Sensor sensor : mySensors) {
-            textView.setText(textView.getText() + "\n" + sensor.getName() + sensor.getType());
-        }
-    }*/
 }
