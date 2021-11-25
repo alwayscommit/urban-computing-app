@@ -13,9 +13,12 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.Spinner;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
@@ -30,6 +33,13 @@ import com.example.urbancomputingapp.model.LocationData;
 import com.example.urbancomputingapp.model.SensorData;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
+import com.google.firebase.FirebaseApp;
+import com.google.firebase.database.ChildEventListener;
+import com.google.firebase.database.DataSnapshot;
+import com.google.firebase.database.DatabaseError;
+import com.google.firebase.database.DatabaseReference;
+import com.google.firebase.database.FirebaseDatabase;
+import com.google.firebase.database.ValueEventListener;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -39,7 +49,9 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /*
 temperature - 33172002, 33172003,
@@ -48,7 +60,6 @@ ambient light - 5*/
 public class MainActivity extends AppCompatActivity implements SensorEventListener {
 
     private static final String CONSUMER_KEY = BuildConfig.CONSUMER_KEY;
-    private static final Integer INTERVAL = BuildConfig.INTERVAL;
     private final List<Float> temperatureList = new ArrayList<Float>();
     private final List<Float> brightnessList = new ArrayList<Float>();
     private final FirebaseDAO firebaseDAO = new FirebaseDAO();
@@ -65,12 +76,18 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView locationHumidity;
     private FusedLocationProviderClient fusedLocationProviderClient;
 
+    private Spinner plantSpinnner;
+    private Set<String> plantNames;
+    private DatabaseReference dbRef;
+
     @RequiresApi(api = Build.VERSION_CODES.N)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        FirebaseApp.initializeApp(this);
         setContentView(R.layout.activity_main);
         temperatureText = findViewById(R.id.temperatureText);
+        plantSpinnner = findViewById(R.id.plantSpinnner);
         brightnessText = findViewById(R.id.brightnessText);
         saveTemperature = findViewById(R.id.saveTemperature);
         saveTemperature.setOnClickListener(v -> writeTemperatureToCSV());
@@ -95,6 +112,27 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         }
                     }
                 });
+            }
+        });
+
+
+        dbRef = FirebaseDatabase.getInstance().getReference();
+        dbRef.child("plant_collection").addValueEventListener(new ValueEventListener() {
+            @Override
+            public void onDataChange(@NonNull DataSnapshot snapshot) {
+                plantNames = new HashSet<>();
+                for(DataSnapshot childSnap: snapshot.getChildren()){
+                    String plantName = childSnap.child("name").getValue(String.class);
+                    plantNames.add(plantName);
+                }
+                ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, new ArrayList<>(plantNames));
+                arrayAdapter.setDropDownViewResource(R.layout.support_simple_spinner_dropdown_item);
+                plantSpinnner.setAdapter(arrayAdapter);
+            }
+
+            @Override
+            public void onCancelled(@NonNull DatabaseError error) {
+
             }
         });
     }
@@ -166,7 +204,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         }, delay);
         super.onResume();
         sensorManager.registerListener(this, sensorManager.getDefaultSensor(33172003), 30000000);
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(6), 30000000);
+//        sensorManager.registerListener(this, sensorManager.getDefaultSensor(6), 30000000);
         sensorManager.registerListener(this, sensorManager.getDefaultSensor(5), 30000000);
     }
 
