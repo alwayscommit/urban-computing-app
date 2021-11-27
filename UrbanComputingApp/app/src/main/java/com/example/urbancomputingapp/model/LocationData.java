@@ -2,9 +2,22 @@ package com.example.urbancomputingapp.model;
 
 public class LocationData {
 
+    private String userId;
     private String dateTime;
-    private String locationTemperature;
-    private String locationHumidity;
+    private Double locationTemperature;
+    private Double locationHumidity;
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
+
+    public LocationData(){
+
+    }
 
     public String getDateTime() {
         return dateTime;
@@ -14,19 +27,19 @@ public class LocationData {
         this.dateTime = dateTime;
     }
 
-    public String getLocationTemperature() {
+    public Double getLocationTemperature() {
         return locationTemperature;
     }
 
-    public void setLocationTemperature(String locationTemperature) {
+    public void setLocationTemperature(Double locationTemperature) {
         this.locationTemperature = locationTemperature;
     }
 
-    public String getLocationHumidity() {
+    public Double getLocationHumidity() {
         return locationHumidity;
     }
 
-    public void setLocationHumidity(String locationHumidity) {
+    public void setLocationHumidity(Double locationHumidity) {
         this.locationHumidity = locationHumidity;
     }
 }

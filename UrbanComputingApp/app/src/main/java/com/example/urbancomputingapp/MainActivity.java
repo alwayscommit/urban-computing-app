@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.graphics.Color;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -13,6 +14,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.provider.Settings;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.Spinner;
@@ -34,12 +36,13 @@ import com.example.urbancomputingapp.model.SensorData;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationServices;
 import com.google.firebase.FirebaseApp;
-import com.google.firebase.database.ChildEventListener;
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import com.google.firebase.functions.FirebaseFunctions;
+import com.google.firebase.functions.FirebaseFunctionsException;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -49,9 +52,10 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
+import java.util.Random;
 
 /*
 temperature - 33172002, 33172003,
@@ -64,20 +68,28 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private final List<Float> brightnessList = new ArrayList<Float>();
     private final FirebaseDAO firebaseDAO = new FirebaseDAO();
     private final Handler handler = new Handler();
-    private Runnable runnable;
     private final int delay = 5000;
+    private Runnable runnable;
     private TextView temperatureText;
     private TextView brightnessText;
+    private TextView humidityText;
+//    private TextView temperatureSample;
+//    private TextView brightnessSample;
+//    private TextView humiditySample;
+    private TextView lightResult;
+    private TextView humidityResult;
+    private TextView temperatureResult;
     private SensorManager sensorManager;
     private Button saveTemperature;
     private Button saveBrightness;
-    private Button locationButton;
+    private Button senseButton;
     private TextView locationTemperature;
     private TextView locationHumidity;
     private FusedLocationProviderClient fusedLocationProviderClient;
+    private String deviceId;
 
     private Spinner plantSpinnner;
-    private Set<String> plantNames;
+    private Map<String, String> plantNames;
     private DatabaseReference dbRef;
 
     @RequiresApi(api = Build.VERSION_CODES.N)
@@ -86,46 +98,43 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         super.onCreate(savedInstanceState);
         FirebaseApp.initializeApp(this);
         setContentView(R.layout.activity_main);
-        temperatureText = findViewById(R.id.temperatureText);
         plantSpinnner = findViewById(R.id.plantSpinnner);
+
+        temperatureText = findViewById(R.id.temperatureText);
         brightnessText = findViewById(R.id.brightnessText);
+        humidityText = findViewById(R.id.humidityText);
+
+//        temperatureSample = findViewById(R.id.temperatureSample);
+//        brightnessSample = findViewById(R.id.brightnessSample);
+//        humiditySample = findViewById(R.id.humiditySample);
+
+        lightResult = findViewById(R.id.lightResult);
+        humidityResult = findViewById(R.id.humidityResult);
+        temperatureResult = findViewById(R.id.temperatureResult);
         saveTemperature = findViewById(R.id.saveTemperature);
         saveTemperature.setOnClickListener(v -> writeTemperatureToCSV());
-        locationButton = findViewById(R.id.locationButton);
+        senseButton = findViewById(R.id.senseButton);
         locationTemperature = findViewById(R.id.locationTemperature);
         locationHumidity = findViewById(R.id.locationHumidity);
         saveBrightness = findViewById(R.id.saveBrightness);
         saveBrightness.setOnClickListener(v -> writeBrightnessToCSV());
 
+        deviceId = Settings.Secure.getString(getContentResolver(), Settings.Secure.ANDROID_ID);
+        senseButton.setOnClickListener(v -> invokeCloudFunction());
+
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-
         fusedLocationProviderClient = LocationServices.getFusedLocationProviderClient(this);
-        locationButton.setOnClickListener(v -> {
-            if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 44);
-            } else {
-                fusedLocationProviderClient.getLastLocation().addOnCompleteListener(task -> {
-                    Location location = task.getResult();
-                    if (location != null) {
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            getLocationData(location.getLatitude(), location.getLongitude());
-                        }
-                    }
-                });
-            }
-        });
-
 
         dbRef = FirebaseDatabase.getInstance().getReference();
         dbRef.child("plant_collection").addValueEventListener(new ValueEventListener() {
             @Override
             public void onDataChange(@NonNull DataSnapshot snapshot) {
-                plantNames = new HashSet<>();
-                for(DataSnapshot childSnap: snapshot.getChildren()){
+                plantNames = new HashMap<>();
+                for (DataSnapshot childSnap : snapshot.getChildren()) {
                     String plantName = childSnap.child("name").getValue(String.class);
-                    plantNames.add(plantName);
+                    plantNames.put(plantName, childSnap.getKey());
                 }
-                ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, new ArrayList<>(plantNames));
+                ArrayAdapter<String> arrayAdapter = new ArrayAdapter<>(MainActivity.this, R.layout.support_simple_spinner_dropdown_item, new ArrayList<>(plantNames.keySet()));
                 arrayAdapter.setDropDownViewResource(R.layout.support_simple_spinner_dropdown_item);
                 plantSpinnner.setAdapter(arrayAdapter);
             }
@@ -137,6 +146,64 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         });
     }
 
+    private void invokeCloudFunction() {
+        senseLocationData();
+        String selectedPlant = plantSpinnner.getSelectedItem().toString();
+        Map<String, Object> data = new HashMap<>();
+        data.put("userId", deviceId);
+        data.put("plantId", plantNames.get(selectedPlant));
+        FirebaseFunctions functions = FirebaseFunctions.getInstance();
+        functions.useEmulator("10.0.2.2", 5001);
+        functions.getHttpsCallable("checkPlantSuitability").call(data)
+                .continueWith(task -> {
+                    Map<String, String> result = (Map<String,String>) task.getResult().getData();
+                    return result;
+                })
+                .addOnCompleteListener(task -> {
+                    if (task.isSuccessful()) {
+                        if(task.getResult().get("lightResult").equals("true")){
+                            lightResult.setTextColor(Color.parseColor("#64f595"));
+                        } else {
+                            lightResult.setTextColor(Color.parseColor("#f56942"));
+                        }
+                        lightResult.setText(task.getResult().get("lightText"));
+                        if(task.getResult().get("humidityResult").equals("true")){
+                            humidityResult.setTextColor(Color.parseColor("#64f595"));
+                        } else {
+                            humidityResult.setTextColor(Color.parseColor("#f56942"));
+                        }
+                        humidityResult.setText(task.getResult().get("humidityText"));
+                        if(task.getResult().get("tempResult").equals("true")){
+                            temperatureResult.setTextColor(Color.parseColor("#64f595"));
+                        } else {
+                            temperatureResult.setTextColor(Color.parseColor("#f56942"));
+                        }
+                        temperatureResult.setText(task.getResult().get("tempText"));
+                    } else {
+                        lightResult.setText("Server is unable to analyze plant suitability at the moment.");
+                        Exception e = task.getException();
+                        if (e instanceof FirebaseFunctionsException) {
+                            e.printStackTrace();
+                        }
+                    }
+                });
+    }
+
+    private void senseLocationData() {
+        if (ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(MainActivity.this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(MainActivity.this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, 44);
+        } else {
+            fusedLocationProviderClient.getLastLocation().addOnCompleteListener(task -> {
+                Location location = task.getResult();
+                if (location != null) {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        getLocationData(location.getLatitude(), location.getLongitude());
+                    }
+                }
+            });
+        }
+    }
+
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void getLocationData(Double latitude, Double longitude) {
         RequestQueue queue = Volley.newRequestQueue(this);
@@ -146,8 +213,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     try {
                         LocationData locationData = parseJSON(response);
                         firebaseDAO.recordLocationData(locationData);
-                        locationHumidity.setText("Humidity: " + locationData.getLocationHumidity());
-                        locationTemperature.setText("Temperature: " + locationData.getLocationTemperature());
+                        locationHumidity.setText(locationData.getLocationHumidity().toString());
+                        locationTemperature.setText(locationData.getLocationTemperature().toString());
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -162,8 +229,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         JSONObject main = locationJSON.getJSONObject("main");
         Double temperature = main.getDouble("temp");
         Double humidity = main.getDouble("humidity");
-        locationData.setLocationHumidity(humidity.toString());
-        locationData.setLocationTemperature(temperature.toString());
+        locationData.setUserId(deviceId);
+        locationData.setLocationHumidity(humidity);
+        locationData.setLocationTemperature(temperature);
         locationData.setDateTime(LocalDateTime.now().toString());
         return locationData;
     }
@@ -184,10 +252,33 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     @RequiresApi(api = Build.VERSION_CODES.O)
     private void recordSensorData() {
         SensorData sensorData = new SensorData();
+        sensorData.setUserId(deviceId);
         sensorData.setDateTime(LocalDateTime.now().toString());
-        sensorData.setTemperature(temperatureText.getText().toString());
-        sensorData.setAmbientLight(brightnessText.getText().toString());
+
+        Double temperature = isEmpty(temperatureText) ? getRandomTemperature() : Double.parseDouble(temperatureText.getText().toString());
+        Double ambientLight = isEmpty(brightnessText) ? getRandomLight() : Double.parseDouble(brightnessText.getText().toString());
+        Integer humidity = isEmpty(humidityText) ? getRandomHumidity() : Integer.parseInt(humidityText.getText().toString());
+
+        sensorData.setTemperature(temperature);
+        sensorData.setAmbientLight(ambientLight);
+        sensorData.setHumidity(humidity);
         firebaseDAO.recordSensorData(sensorData);
+    }
+
+    private Integer getRandomHumidity() {
+        return new Random().nextInt((60 - 30) + 1) + 30;
+    }
+
+    private boolean isEmpty(TextView text) {
+        return text.getText().equals("") || text.getText().equals("0.0");
+    }
+
+    private Double getRandomLight() {
+        return (new Random().nextDouble() * (2500.0 - 100.0)) + 100.0;
+    }
+
+    private Double getRandomTemperature() {
+        return (new Random().nextDouble() * (25.0 - 10.0)) + 10.0;
     }
 
     @Override
@@ -203,9 +294,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             recordSensorData();
         }, delay);
         super.onResume();
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(33172003), 30000000);
-//        sensorManager.registerListener(this, sensorManager.getDefaultSensor(6), 30000000);
-        sensorManager.registerListener(this, sensorManager.getDefaultSensor(5), 30000000);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(33172003), 3000000);
+        sensorManager.registerListener(this, sensorManager.getDefaultSensor(5), 3000000);
     }
 
     @Override
