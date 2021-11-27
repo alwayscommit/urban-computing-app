@@ -16,15 +16,14 @@ let serviceAccount = require('D:\\AAATrinity\\Urban Computing\\project3\\service
 //     response.send(number.toString());
 // });
 
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://urban-computing-app-3e91a-default-rtdb.firebaseio.com"
-});
+// admin.initializeApp({
+    // credential: admin.credential.cert(serviceAccount),
+    // databaseURL: "https://urban-computing-app-3e91a-default-rtdb.firebaseio.com"
+// });
 
 // admin.initializeApp(functions.config().firebase);
 
 exports.checkPlantSuitability = functions.https.onCall((data, context) => {
-    console.log("hello");
     const plantData = admin.database().ref("plant_collection/"+data.plantId);
     return plantData.once('value').then(plantSnap => {
         const sensorData = admin.database().ref("SensorData").orderByChild("userId").equalTo(data.userId).limitToLast(1);
@@ -37,9 +36,6 @@ exports.checkPlantSuitability = functions.https.onCall((data, context) => {
                     ambientLight = parseInt(sensor.val().ambientLight); 
                     humidity = sensor.val().humidity; 
                     temperature = parseInt(sensor.val().temperature); 
-                    console.log("1: " + locationSnap.val());
-                    console.log("2: " + sensorSnap.val());
-                    console.log("3: " + plantSnap.val());
 
                     locationSnap.forEach(function(location) {
                         if((ambientLight <= plant.maxLight) && (ambientLight >= plant.minLight)){

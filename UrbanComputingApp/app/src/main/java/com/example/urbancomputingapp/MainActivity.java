@@ -73,9 +73,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     private TextView temperatureText;
     private TextView brightnessText;
     private TextView humidityText;
-//    private TextView temperatureSample;
-//    private TextView brightnessSample;
-//    private TextView humiditySample;
+    private TextView temperatureSample;
+    private TextView brightnessSample;
+    private TextView humiditySample;
+    private TextView locationHumiditySample;
+    private TextView locationTempSample;
     private TextView lightResult;
     private TextView humidityResult;
     private TextView temperatureResult;
@@ -104,9 +106,11 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         brightnessText = findViewById(R.id.brightnessText);
         humidityText = findViewById(R.id.humidityText);
 
-//        temperatureSample = findViewById(R.id.temperatureSample);
-//        brightnessSample = findViewById(R.id.brightnessSample);
-//        humiditySample = findViewById(R.id.humiditySample);
+        temperatureSample = findViewById(R.id.temperatureSample);
+        brightnessSample = findViewById(R.id.brightnessSample);
+        humiditySample = findViewById(R.id.humiditySample);
+        locationHumiditySample = findViewById(R.id.locationHumiditySample);
+        locationTempSample = findViewById(R.id.locationTempSample);
 
         lightResult = findViewById(R.id.lightResult);
         humidityResult = findViewById(R.id.humidityResult);
@@ -214,7 +218,9 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                         LocationData locationData = parseJSON(response);
                         firebaseDAO.recordLocationData(locationData);
                         locationHumidity.setText(locationData.getLocationHumidity().toString());
+                        locationHumiditySample.setText(locationData.getLocationHumidity().toString());
                         locationTemperature.setText(locationData.getLocationTemperature().toString());
+                        locationTempSample.setText(locationData.getLocationTemperature().toString());
                     } catch (JSONException e) {
                         e.printStackTrace();
                     }
@@ -245,7 +251,24 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
             temperatureList.add(event.values[0]);
         } else if (sensor.getType() == 5) {
             brightnessText.setText(String.valueOf(event.values[0]));
+            if(isEmpty(brightnessText)){
+                Double light = getRandomLight();
+                brightnessSample.setText(String.valueOf(light.intValue()));
+            } else {
+                brightnessSample.setText(brightnessText.getText());
+            }
+            if(isEmpty(humidityText)){
+                humiditySample.setText(getRandomHumidity().toString());
+            } else {
+                humiditySample.setText(humidityText.getText());
+            }
             brightnessList.add(event.values[0]);
+        }
+        if(isEmpty(temperatureText)){
+            Double temp = getRandomTemperature();
+            temperatureSample.setText(String.valueOf(temp.intValue()));
+        } else {
+            temperatureSample.setText(temperatureText.getText());
         }
     }
 
