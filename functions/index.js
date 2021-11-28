@@ -1,27 +1,13 @@
 const functions = require("firebase-functions");
 const admin = require('firebase-admin');
-let serviceAccount = require('D:\\AAATrinity\\Urban Computing\\project3\\serviceAccountKey.json');
-
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
-// exports.helloWorld = functions.https.onRequest((request, response) => {
-//   functions.logger.info("Hello logs!", {structuredData: true});
-//   response.send("Hello from Firebase!");
-// });
-
-//http hello world
-// exports.randomNumber = functions.https.onRequest((request, response) => {
-//     const number = Math.round(Math.random() * 100);
-//     response.send(number.toString());
-// });
+// let serviceAccount = require('D:\\AAATrinity\\Urban Computing\\project3\\serviceAccountKey.json');
 
 // admin.initializeApp({
     // credential: admin.credential.cert(serviceAccount),
     // databaseURL: "https://urban-computing-app-3e91a-default-rtdb.firebaseio.com"
 // });
 
-// admin.initializeApp(functions.config().firebase);
+admin.initializeApp(functions.config().firebase);
 
 exports.checkPlantSuitability = functions.https.onCall((data, context) => {
     const plantData = admin.database().ref("plant_collection/"+data.plantId);

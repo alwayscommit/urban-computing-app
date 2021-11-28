@@ -157,7 +157,7 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
         data.put("userId", deviceId);
         data.put("plantId", plantNames.get(selectedPlant));
         FirebaseFunctions functions = FirebaseFunctions.getInstance();
-        functions.useEmulator("10.0.2.2", 5001);
+//        functions.useEmulator("10.0.2.2", 5001);
         functions.getHttpsCallable("checkPlantSuitability").call(data)
                 .continueWith(task -> {
                     Map<String, String> result = (Map<String,String>) task.getResult().getData();
@@ -203,6 +203,8 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                         getLocationData(location.getLatitude(), location.getLongitude());
                     }
+                } else {
+
                 }
             });
         }
@@ -247,8 +249,10 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
     public void onSensorChanged(SensorEvent event) {
         Sensor sensor = event.sensor;
         if (sensor.getType() == 33172003) {
-            temperatureText.setText(String.valueOf(event.values[0]));
-            temperatureList.add(event.values[0]);
+            Double temp = getRandomTemperature();
+            temperatureSample.setText(String.valueOf(temp.intValue()));
+            temperatureText.setText(String.valueOf(temp.intValue()));
+            temperatureList.add(temp.floatValue());
         } else if (sensor.getType() == 5) {
             brightnessText.setText(String.valueOf(event.values[0]));
             if(isEmpty(brightnessText)){
@@ -263,12 +267,6 @@ public class MainActivity extends AppCompatActivity implements SensorEventListen
                 humiditySample.setText(humidityText.getText());
             }
             brightnessList.add(event.values[0]);
-        }
-        if(isEmpty(temperatureText)){
-            Double temp = getRandomTemperature();
-            temperatureSample.setText(String.valueOf(temp.intValue()));
-        } else {
-            temperatureSample.setText(temperatureText.getText());
         }
     }
 
