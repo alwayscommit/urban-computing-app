@@ -1,12 +1,36 @@
 package com.example.urbancomputingapp.model;
 
-import java.time.LocalDateTime;
-
 public class SensorData {
 
+    private String userId;
     private String dateTime;
-    private String temperature;
-    private String ambientLight;
+    private Double temperature;
+    private Double ambientLight;
+    private Integer humidity;
+
+    public void setTemperature(Double temperature) {
+        this.temperature = temperature;
+    }
+
+    public void setAmbientLight(Double ambientLight) {
+        this.ambientLight = ambientLight;
+    }
+
+    public Integer getHumidity() {
+        return humidity;
+    }
+
+    public void setHumidity(Integer humidity) {
+        this.humidity = humidity;
+    }
+
+    public String getUserId() {
+        return userId;
+    }
+
+    public void setUserId(String userId) {
+        this.userId = userId;
+    }
 
     public String getDateTime() {
         return dateTime;
@@ -16,19 +40,11 @@ public class SensorData {
         this.dateTime = dateTime;
     }
 
-    public String getTemperature() {
+    public Double getTemperature() {
         return temperature;
     }
 
-    public void setTemperature(String temperature) {
-        this.temperature = temperature;
-    }
-
-    public String getAmbientLight() {
+    public Double getAmbientLight() {
         return ambientLight;
-    }
-
-    public void setAmbientLight(String ambientLight) {
-        this.ambientLight = ambientLight;
     }
 }
